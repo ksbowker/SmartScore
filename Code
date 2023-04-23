@@ -1,0 +1,61 @@
+import numpy as np
+import pandas as pd
+import requests
+
+class SportsAnalyzer:
+    def __init__(self, api_key):
+        self.api_key = api_key
+        self.base_url = "https://api.sportsdata.io/v3/nfl/"
+    
+    def get_player_stats(self, player_id):
+        url = self.base_url + f"stats/json/PlayerSeasonStatsByPlayerID/{player_id}?key={self.api_key}"
+        response = requests.get(url)
+        if response.status_code != 200:
+            return "Error: failed to retrieve player stats"
+        data = response.json()
+        player_name = data["Name"]
+        stats = data["PlayerSeason"]
+        df = pd.DataFrame(stats)
+        df.set_index("SeasonType", inplace=True)
+        return f"{player_name}'s stats:\n{df}"
+    
+    def get_team_rankings(self, year, week):
+        url = self.base_url + f"scores/json/TeamSeasonStats/{year}/{week}?key={self.api_key}"
+        response = requests.get(url)
+        if response.status_code != 200:
+            return "Error: failed to retrieve team rankings"
+        data = response.json()
+        stats = data["TeamSeason"]
+        df = pd.DataFrame(stats)
+        df.set_index("TeamID", inplace=True)
+        df = df[["Rank", "Wins", "Losses", "PointsFor", "PointsAgainst"]]
+        return f"Team rankings for week {week} of {year}:\n{df}"
+    
+    def predict_outcome(self, home_team_id, away_team_id):
+        url = self.base_url + f"odds/json/GameOddsByMatchup/{home_team_id}/{away_team_id}?key={self.api_key}"
+        response = requests.get(url)
+        if response.status_code != 200:
+            return "Error: failed to retrieve game odds"
+        data = response.json()
+        odds = data["GameOdds"][0]
+        home_team_name = odds["HomeTeamName"]
+        away_team_name = odds["AwayTeamName"]
+        home_team_odds = odds["HomeTeamOdds"]["PointSpreadOdds"]["American"]
+        away_team_odds = odds["AwayTeamOdds"]["PointSpreadOdds"]["American"]
+        home_team_win_prob = 1 / (1 + np.exp(-(home_team_odds / 100)))
+        away_team_win_prob = 1 / (1 + np.exp(-(away_team_odds / 100)))
+        return f"Based on the odds, {home_team_name} has a {home_team_win_prob:.2%} chance of winning, while {away_team_name} has a {away_team_win_prob:.2%} chance of winning."
+    
+    def get_player_of_the_game(self, game_id):
+        url = self.base_url + f"scores/json/PlayerGameStatsByGameID/{game_id}?key={self.api_key}"
+        response = requests.get(url)
+        if response.status_code != 200:
+            return "Error: failed to retrieve game stats"
+        data = response.json()
+        player_stats = data["PlayerGameStats"]
+        if not player_stats:
+            return "No players found for this game."
+        max_score = -np.inf
+        player_of_the_game = ""
+        for stats in player_stats:
+            score = stats["RushingTouchdowns"]*6 + stats["ReceivingTouchdowns"]*6 + stats["PassingTouchdowns"]*4 + stats["FieldGoalsMade"]*3 + stats["ExtraPointsMade
